@@ -58,26 +58,9 @@ func HashTileSet(img image.Image, bounds image.Rectangle, tiles []int,
 // the ones that depend on the colour theme.
 func ProcessEditorShot(filename string, first bool,
 ) (colourThemed []uint32, anyColour []uint32) {
-	fd, err := os.Open(filename)
+	img, mapBounds, _, err := edshot.LoadMap(filename)
 	if err != nil {
-		log.Printf("Unable to open '%s'", filename)
-		return
-	}
-	defer fd.Close()
-	img, _, err := image.Decode(fd)
-	if err != nil {
-		log.Printf("Unable to decode '%s' (invalid PNG?)", filename)
-		return
-	}
-	selBounds, _, err := edshot.FindSelecters(img)
-	if err != nil {
-		log.Printf("Unable to find selecter tiles in '%s'", filename)
-		return
-	}
-	mapBounds, err := edshot.FindMap(img, selBounds.Min.X,
-		(selBounds.Min.Y+selBounds.Max.Y)/2)
-	if err != nil {
-		log.Printf("Unable to find map region in '%s'", filename)
+		log.Println(err)
 		return
 	}
 	colourThemed = HashTileSet(img, mapBounds, repton2.ColourThemedTiles)
