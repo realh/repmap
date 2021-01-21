@@ -19,22 +19,38 @@ import (
 	"github.com/realh/repmap/pkg/repton2"
 )
 
-// HashTile gets the hash of a tile in the map; bounds is the img's map region
-func HashTile(img image.Image, bounds image.Rectangle, tileIndex int,
-) uint32 {
-	var x, y int
-	if tileIndex == repton2.T_BRICK_GROUND {
-		x = 0
-		y = 0
-	} else {
-		x = tileIndex % edshot.SEL_COLUMNS
-		y = tileIndex/edshot.SEL_COLUMNS + 1
+// HashTileSet gets the hashes of a list of tile indices (corresponding to the
+// T_ constants), using the positions as used in the reference level snapshots.
+// bounds is the map region.
+func HashTileSet(img image.Image, bounds image.Rectangle, tiles []int,
+) []uint32 {
+	n := len(tiles)
+	positions := make([]image.Point, n)
+	ch := make(chan bool, n)
+	for i, t := range tiles {
+		go func(i, t int) {
+			var x, y int
+			// Editor only allows brick ground to appear in the top row of a
+			// map, so this is at 0, 0. The following rows are a copy of the
+			// tile selecter, with blanks for puzzle and brick ground, and a
+			// red-background skull at position (3, 5) (where row 5 is the 6th
+			// row of the selecter).
+			if t == repton2.T_BRICK_GROUND {
+				x = 0
+				y = 0
+			} else {
+				x = t % edshot.SEL_COLUMNS
+				y = t/edshot.SEL_COLUMNS + 1
+			}
+			positions[i] = image.Point{x, y}
+			ch <- true
+		}(i, t)
 	}
-	bounds.Min.X += x * edshot.MAP_TILE_WIDTH
-	bounds.Min.Y += y * edshot.MAP_TILE_HEIGHT
-	bounds.Max.X = bounds.Min.X + edshot.MAP_TILE_WIDTH
-	bounds.Max.Y = bounds.Min.Y + edshot.MAP_TILE_HEIGHT
-	return edshot.HashImage(img, bounds)
+	// await
+	for range positions {
+		<-ch
+	}
+	return edshot.HashMapTiles(img, bounds, positions)
 }
 
 // ProcessEditorShot finds the map region in the named PNG and returns hashes of
@@ -64,32 +80,9 @@ func ProcessEditorShot(filename string, first bool,
 		log.Printf("Unable to find map region in '%s'", filename)
 		return
 	}
-	n := len(repton2.ColourThemedTiles)
-	colourThemed = make([]uint32, n)
+	colourThemed = HashTileSet(img, mapBounds, repton2.ColourThemedTiles)
 	if first {
-		l := len(repton2.AnyColourTiles)
-		anyColour = make([]uint32, l)
-		n += l
-	}
-	// ch is for awaiting completed goroutines
-	ch := make(chan bool, len(colourThemed)+len(anyColour))
-	for i, t := range repton2.ColourThemedTiles {
-		go func(i int, t int) {
-			colourThemed[i] = HashTile(img, mapBounds, t)
-			ch <- true
-		}(i, t)
-	}
-	if first {
-		for i, t := range repton2.AnyColourTiles {
-			go func(i int, t int) {
-				anyColour[i] = HashTile(img, mapBounds, t)
-				ch <- true
-			}(i, t)
-		}
-	}
-	// await
-	for i := 0; i < n; i++ {
-		<-ch
+		anyColour = HashTileSet(img, mapBounds, repton2.AnyColourTiles)
 	}
 	return
 }
