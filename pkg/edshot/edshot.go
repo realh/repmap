@@ -220,7 +220,7 @@ func FindMap(img image.Image, x, y int) (rect image.Rectangle, err error) {
 		rect.Min.X = minX
 		rect.Max.X = maxX
 		rect.Min.Y = minY1
-		rect.Max.Y = minY2
+		rect.Max.Y = maxY1
 		break
 	}
 	if !found {

@@ -38,6 +38,7 @@ func GetMapHashes(img image.Image, mapBounds image.Rectangle) []uint32 {
 		for x := 0; x < w; x++ {
 			go func(x, y, i int) {
 				positions[i] = image.Point{x, y}
+				i++
 				ch <- true
 			}(x, y, i)
 		}
@@ -63,6 +64,9 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 		return
 	}
 	clrName := repton.ColourNames[cTheme]
+	w := (mapBounds.Max.X - mapBounds.Min.X) / edshot.MAP_TILE_WIDTH
+	h := (mapBounds.Max.Y - mapBounds.Min.Y) / edshot.MAP_TILE_HEIGHT
+	log.Printf("Map '%s' is %s and %d x %d", inFilename, clrName, w, h)
 	// Merge the two sets of hashes into a map of T_ value keyed by hash
 	themed := refTiles[clrName]
 	unthemed := refTiles["Any"]
@@ -106,7 +110,6 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 	}
 	defer fd.Close()
 	fmt.Fprintf(fd, "%s\n", clrName)
-	w := (mapBounds.Max.X - mapBounds.Min.X) / edshot.MAP_TILE_WIDTH
 	for row := 0; row < n; row += w {
 		fd.Write(tValues[row : row+w])
 		fmt.Fprintln(fd, "")
