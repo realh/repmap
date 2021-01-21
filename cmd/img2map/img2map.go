@@ -3,7 +3,9 @@
 // single PNG, a scenario folder containing 01.png ... 20.png, or a folder of
 // scenario folders. $2 contains the reference tile hashes in JSON format. $3
 // is the output folder; it will be filled with folders/files mirroring the
-// structure below input but with each .png replaced by a .txt.
+// structure below input but with each .png replaced by a .txt. If the input
+// is a single file, the output folder must exist, otherwise folders will be
+// created if necessary.
 //
 // The first line of the text file contains the colour theme eg "Blue". Each
 // subsequent line is a string of characters representing a map row. '.' means
@@ -229,12 +231,12 @@ func main() {
 		log.Println("img2map takes 3 arguments: ")
 		log.Fatalln("input folder, output folder, reference tiles JSON")
 	}
-	refTiles, err := LoadRefHashes(os.Args[3])
+	refTiles, err := LoadRefHashes(os.Args[2])
 	if err != nil {
 		log.Fatalf("Failed to load/parse reference tiles: %v", err)
 	}
 	ch := make(chan bool, 32)
-	numChildren := ProcessRecursive(os.Args[1], os.Args[2], "", refTiles, ch)
+	numChildren := ProcessRecursive(os.Args[1], os.Args[3], "", refTiles, ch)
 	for n := 0; n < numChildren; n++ {
 		<-ch
 	}
