@@ -95,7 +95,7 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 			} else if t < 10 {
 				c = '0' + byte(t)
 			} else {
-				c = 'A' + byte(t-20)
+				c = 'A' + byte(t-10)
 			}
 			tValues[i] = c
 			ch <- true
