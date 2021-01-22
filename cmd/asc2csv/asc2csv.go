@@ -51,8 +51,15 @@ func main() {
 			} else {
 				t = int(c-'A') + 10
 			}
+			// Gerald's format has some different numbers
 			if t == repton2.T_SKULL_RED {
-				t = repton2.T_SKULL
+				t = 31
+			} else if t == repton2.T_EGG {
+				t = 33
+			} else if t == repton2.T_KEY {
+				t = 34
+			} else if t == repton2.T_SAVE {
+				t = 30
 			}
 			if t == repton2.T_PUZZLE {
 				codes[i] = "unk"
