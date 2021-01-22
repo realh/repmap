@@ -60,8 +60,10 @@ func main() {
 				t = 34
 			} else if t == repton2.T_SAVE {
 				t = 30
+			} else if t == repton2.T_PUZZLE {
+				t = -1
 			}
-			if t == repton2.T_PUZZLE {
+			if t == -1 {
 				codes[i] = "unk"
 			} else {
 				codes[i] = fmt.Sprintf("%d", t)
