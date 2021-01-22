@@ -52,24 +52,26 @@ func GetMapHashes(img image.Image, mapBounds image.Rectangle) []uint32 {
 }
 
 // ProcessMap loads the map and works out what each tile represents using
-// refTiles. It saves a text file representation of the map.
-func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
+// refTiles. It saves a text file representation of the map and returns the
+// number of puzzle pieces.
+func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32,
+) int {
 	img, mapBounds, selBounds, err := edshot.LoadMap(inFilename)
 	if err != nil {
 		log.Println(err)
-		return
+		return 0
 	}
 	// What colour is this map?
 	cTheme := edshot.GetMapColourTheme(img, selBounds)
 	if cTheme == -1 {
 		log.Printf("Failed to detect colour theme of '%s'", inFilename)
-		return
+		return 0
 	}
 	clrName := repton.ColourNames[cTheme]
 	w := (mapBounds.Max.X - mapBounds.Min.X) / edshot.MAP_TILE_WIDTH
 	h := (mapBounds.Max.Y - mapBounds.Min.Y) / edshot.MAP_TILE_HEIGHT
 	log.Printf("Map '%s' is %s and %d x %d", inFilename, clrName, w, h)
-	// Merge the two sets of hashes into a map of T_ value keyed by hash
+	// Make the hash array into a map
 	refHashes := make(map[uint32]int)
 	for i, h := range refTiles[clrName] {
 		refHashes[h] = i
@@ -93,17 +95,20 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 				c = 'A' + byte(t-10)
 			}
 			tValues[i] = c
-			ch <- true
+			ch <- ok
 		}(i, h)
 	}
-	// await
+	// await and count puzzle pieces
+	nPuzzles := 0
 	for range tValues {
-		<-ch
+		if !<-ch {
+			nPuzzles++
+		}
 	}
 	fd, err := os.Create(outFilename)
 	if err != nil {
 		log.Printf("Failed to create output file '%s': %v", outFilename, err)
-		return
+		return nPuzzles
 	}
 	defer fd.Close()
 	fmt.Fprintf(fd, "%s\n", clrName)
@@ -111,6 +116,8 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 		fd.Write(tValues[row : row+w])
 		fmt.Fprintln(fd, "")
 	}
+	log.Printf("%s contains %d puzzle pieces", inFilename, nPuzzles)
+	return nPuzzles
 }
 
 // Returns true if filename matches "xx.png" where xx are digits, and it is a
@@ -135,9 +142,10 @@ func isLevelPng(filename string) bool {
 // ProcessRecursive processes the PNGs where inputRoot meets the conditions in
 // the comment at the top of this file. ch should be long enough to run a
 // decent number of goroutines in parallel. The result is the number of values
-// you should read from ch to await all the goroutines this starts.
+// you should read from ch to await all the goroutines this starts. Each value
+// sent down ch is the number of puzzle pieces found in a level
 func ProcessRecursive(inputRoot, outputRoot, child string,
-	refTiles map[string][]uint32, ch chan bool,
+	refTiles map[string][]uint32, ch chan int,
 ) int {
 	var inPath, outPath string
 	if child != "" {
@@ -150,8 +158,7 @@ func ProcessRecursive(inputRoot, outputRoot, child string,
 	if isLevelPng(inPath) {
 		go func() {
 			outPath = outPath[:len(outPath)-3] + "txt"
-			ProcessMap(inPath, outPath, refTiles)
-			ch <- true
+			ch <- ProcessMap(inPath, outPath, refTiles)
 		}()
 		return 1
 	}
@@ -230,9 +237,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load/parse reference tiles: %v", err)
 	}
-	ch := make(chan bool, 32)
+	ch := make(chan int, 32)
 	numChildren := ProcessRecursive(os.Args[1], os.Args[3], "", refTiles, ch)
+	nPuzzles := 0
 	for n := 0; n < numChildren; n++ {
-		<-ch
+		nPuzzles += <-ch
 	}
+	log.Printf("Found a total of %d puzzle pieces", nPuzzles)
 }
