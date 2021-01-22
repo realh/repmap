@@ -70,14 +70,9 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32) {
 	h := (mapBounds.Max.Y - mapBounds.Min.Y) / edshot.MAP_TILE_HEIGHT
 	log.Printf("Map '%s' is %s and %d x %d", inFilename, clrName, w, h)
 	// Merge the two sets of hashes into a map of T_ value keyed by hash
-	themed := refTiles[clrName]
-	unthemed := refTiles["Any"]
 	refHashes := make(map[uint32]int)
-	for i, h := range themed {
-		refHashes[h] = repton2.ColourThemedTiles[i]
-	}
-	for i, h := range unthemed {
-		refHashes[h] = repton2.AnyColourTiles[i]
+	for i, h := range refTiles[clrName] {
+		refHashes[h] = i
 	}
 	hashedTiles := GetMapHashes(img, mapBounds)
 	n := len(hashedTiles)
