@@ -40,9 +40,9 @@ func GetMapHashes(img image.Image, mapBounds image.Rectangle) []uint32 {
 		for x := 0; x < w; x++ {
 			go func(x, y, i int) {
 				positions[i] = image.Point{x, y}
-				i++
 				ch <- true
 			}(x, y, i)
+			i++
 		}
 	}
 	for range positions {
