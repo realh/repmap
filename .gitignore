@@ -1,6 +1,8 @@
 /asc2csv
+/csv2asc
 /img2map
 /level_shots
 /level_txts
 /refhash
 *.csv
+*.txt
