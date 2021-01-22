@@ -30,16 +30,19 @@ func HashTileSet(img image.Image, bounds image.Rectangle) []uint32 {
 			var x, y int
 			// Editor only allows brick ground to appear in the top row of a
 			// map, so this is at 0, 0. The following rows are a copy of the
-			// tile selecter, with blanks for puzzle and brick ground, and a
-			// red-background skull at position (3, 5) (where row 5 is the 6th
-			// row of the selecter).
-			if i == repton2.T_BRICK_GROUND {
+			// tile selecter, with blanks for puzzle and brick ground.
+			// Red-background skull is next to brick ground at position (1, 0).
+			switch i {
+			case repton2.T_BRICK_GROUND:
 				x = 0
 				y = 0
-			} else if i == repton2.T_PUZZLE {
+			case repton2.T_SKULL_RED:
+				x = 1
+				y = 0
+			case repton2.T_PUZZLE:
 				x = -1
 				y = -1
-			} else {
+			default:
 				x = i % edshot.SEL_COLUMNS
 				y = i/edshot.SEL_COLUMNS + 1
 			}
