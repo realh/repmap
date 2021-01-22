@@ -36,6 +36,9 @@ func HashTileSet(img image.Image, bounds image.Rectangle) []uint32 {
 			if i == repton2.T_BRICK_GROUND {
 				x = 0
 				y = 0
+			} else if i == repton2.T_PUZZLE {
+				x = -1
+				y = -1
 			} else {
 				x = i % edshot.SEL_COLUMNS
 				y = i/edshot.SEL_COLUMNS + 1

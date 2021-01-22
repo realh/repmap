@@ -12,14 +12,20 @@ func HashMapTiles(img image.Image, bounds image.Rectangle,
 	ch := make(chan bool, n)
 	for i, point := range positions {
 		go func(i int, point image.Point) {
-			b := image.Rectangle{
-				Min: image.Point{point.X * MAP_TILE_WIDTH,
-					point.Y * MAP_TILE_HEIGHT},
+			// Negative coords mean don't hash, used for puzzle pieces
+			if point.X < 0 || point.Y < 0 {
+				hashes[i] = 0
+				ch <- false
+			} else {
+				b := image.Rectangle{
+					Min: image.Point{point.X * MAP_TILE_WIDTH,
+						point.Y * MAP_TILE_HEIGHT},
+				}
+				b.Min = b.Min.Add(bounds.Min)
+				b.Max = b.Min.Add(image.Point{MAP_TILE_WIDTH, MAP_TILE_HEIGHT})
+				hashes[i] = HashImage(img, b)
+				ch <- true
 			}
-			b.Min = b.Min.Add(bounds.Min)
-			b.Max = b.Min.Add(image.Point{MAP_TILE_WIDTH, MAP_TILE_HEIGHT})
-			hashes[i] = HashImage(img, b)
-			ch <- true
 		}(i, point)
 	}
 	// await
