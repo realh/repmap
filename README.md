@@ -44,6 +44,10 @@ folders, mirroring the input. `reftilehashes.json` is supplied with this
 repository and holds hash values for all the different tile sprites which
 img2map uses to work out tile types from pixel data.
 
+The output on stderr includes the number of puzzle pieces found, which can
+serve as a useful warning that matching may have gone wrong. The default number
+of puzzle pieces per scenario is 104.
+
 refhash
 -------
 This is the tool used to generate `reftilehashes.json`, so you shouldn't need
