@@ -28,9 +28,11 @@ the tiles appear in the 6x6 selecter part of the editor, and differs slightly
 from the ordering that Repton Map Decoder uses. These values are mapped to
 characters as follows:
 
+```
 0 = .
 1-9 = 1-9
 10-33 = A-X
+```
 
 To run it:
 
