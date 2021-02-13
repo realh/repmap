@@ -42,6 +42,13 @@ func readLines(filename string) <-chan string {
 	return ch
 }
 
+// borders holds the lines from the Borders.csv file, one per level.
+// The format is Top,Map,Tile where:
+// Top = Underground, Surface or Meteors
+// Map = Viewable, Visited or No
+// Tile = Index code of tile which surrounds the map
+var borders []string
+
 func readAllLines(ch <-chan string) []string {
 	var lines []string
 	for {
@@ -59,6 +66,8 @@ func level(num int, output io.Writer) {
 	fmt.Fprintf(output, "%02d\n", num)
 	ch := readLines(filepath.Join(os.Args[1], fmt.Sprintf("%02d.txt", num)))
 	line := <-ch
+	// Output borders info
+	fmt.Fprintln(output, borders[num-1])
 	// First line of input is colour
 	line = strings.ToLower(line)
 	fmt.Fprintln(output, line)
@@ -125,6 +134,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to open/create %s: %s", os.Args[2], err)
 	}
+	ch := readLines(filepath.Join(os.Args[1], "Borders.csv"))
+	borders = readAllLines(ch)
 	for n := 1; n <= 20; n++ {
 		level(n, output)
 	}
