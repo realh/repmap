@@ -14,6 +14,28 @@ import (
 	"strings"
 )
 
+// PosKey encodes a map level number and x, y coords in a single int
+type PosKey int
+
+// NewPosKey creates a new PosKey from the given level and position
+func NewPosKey(level, x, y int) PosKey {
+	return PosKey((level << 16) | (x << 8) | y)
+}
+
+// Decode returns the individual components of a PosKey
+func (pk PosKey) Decode() (level, x, y int) {
+	i := int(pk)
+	level = i >> 16
+	x = (i >> 8) & 0xff
+	y = i & 0xff
+	return
+}
+
+func (pk PosKey) String() string {
+	l, x, y := pk.Decode()
+	return fmt.Sprintf("%d,%d,%d", l, x, y)
+}
+
 // readLines reads a text file one (trimmed) line at a time
 func readLines(filename string) <-chan string {
 	fd, err := os.Open(filename)
@@ -49,6 +71,17 @@ func readLines(filename string) <-chan string {
 // Tile = Index code of tile which surrounds the map
 var borders []string
 
+// tiles holds ASCII codes of all tiles in the scenario that we need to check:
+// blank, transporter and puzzle
+var tiles = make(map[PosKey]rune)
+
+// puzzles holds locations all puzzle pieces found in Puzzle.csv
+var puzzles = make(map[PosKey]int)
+
+// transporters holds all transporters found in Transporters.csv
+// Key is src, val is dest
+var transporters = make(map[PosKey]PosKey)
+
 func readAllLines(ch <-chan string) []string {
 	var lines []string
 	for {
@@ -61,7 +94,7 @@ func readAllLines(ch <-chan string) []string {
 	return lines
 }
 
-func level(num int, output io.Writer) {
+func doLevel(num int, output io.Writer) {
 	// Add level number
 	fmt.Fprintf(output, "%02d\n", num)
 	ch := readLines(filepath.Join(os.Args[1], fmt.Sprintf("%02d.txt", num)))
@@ -76,8 +109,15 @@ func level(num int, output io.Writer) {
 	// Output size
 	fmt.Fprintf(output, "%d,%d\n", len(lines[0]), len(lines))
 	// Output lines of level data
-	for _, ln := range lines {
+	for y, ln := range lines {
 		fmt.Fprintln(output, ln)
+		for x, c := range ln {
+			switch c {
+			case '.', 'O', 'U':
+				pk := NewPosKey(num, x, y)
+				tiles[pk] = c
+			}
+		}
 	}
 	// Terminate with one dash for most levels, two dashes for final level
 	if num == 20 {
@@ -87,7 +127,7 @@ func level(num int, output io.Writer) {
 	}
 }
 
-func transporters(output io.Writer) {
+func doTransporters(output io.Writer) {
 	ch := readLines(filepath.Join(os.Args[1], "Transporters.csv"))
 	_ = <-ch
 	// First line says "Transporters:"; we'll add their count, so
@@ -96,13 +136,36 @@ func transporters(output io.Writer) {
 	// Output size
 	fmt.Fprintf(output, "Transporters: %d\n", len(lines))
 	// Each line is src level, x, y, dest level, x, y
-	for _, ln := range lines {
+	for n, ln := range lines {
 		fmt.Fprintln(output, ln)
+		svals := strings.Split(lines[n], ",")
+		ivals := make([]int, len(svals))
+		var err error
+		if len(ivals) != 6 {
+			err = fmt.Errorf("Not 6 fields")
+		}
+		if err == nil {
+			for n, s := range svals {
+				var i int64
+				i, err = strconv.ParseInt(s, 10, 64)
+				if err != nil {
+					log.Printf(
+						"Unable to parse transporter from line %d: %s: %s",
+						n, ln, err)
+					break
+				}
+				ivals[n] = int(i)
+			}
+		}
+		if err == nil {
+			transporters[NewPosKey(ivals[0], ivals[1], ivals[2])] =
+				NewPosKey(ivals[3], ivals[4], ivals[5])
+		}
 	}
 	fmt.Fprintln(output, "--")
 }
 
-func puzzle(output io.Writer) {
+func doPuzzle(output io.Writer) {
 	ch := readLines(filepath.Join(os.Args[1], "Puzzle.csv"))
 	line := <-ch
 	// First line contains width, height (number of tiles)
@@ -125,8 +188,60 @@ func puzzle(output io.Writer) {
 	// Each line is level, x, y
 	for n := 0; n < count; n++ {
 		fmt.Fprintln(output, lines[n])
+		vals := strings.Split(lines[n], ",")
+		var l, x, y int64
+		l, err = strconv.ParseInt(vals[0], 10, 64)
+		if err == nil {
+			x, err = strconv.ParseInt(vals[1], 10, 64)
+		}
+		if err == nil {
+			y, err = strconv.ParseInt(vals[1], 10, 64)
+		}
+		if err != nil {
+			log.Printf("Couldn't parse puzzle position from line %d: %s: %s",
+				n, lines[n], err)
+		} else {
+			puzzles[NewPosKey(int(l), int(x), int(y))] = n
+		}
 	}
 	fmt.Fprintln(output, "--")
+}
+
+func validate() {
+	for pk, code := range tiles {
+		switch code {
+		case 'O':
+			if _, ok := transporters[pk]; !ok {
+				log.Printf(
+					"Tile at %s is a transporter not found in Transporters.csv",
+					pk)
+			}
+		case 'U':
+			if _, ok := puzzles[pk]; !ok {
+				log.Printf(
+					"Tile at %s is a puzzle piece not found in Puzzle.csv",
+					pk)
+			}
+		}
+	}
+	for pk := range puzzles {
+		if tiles[pk] != 'U' {
+			log.Printf(
+				"Puzzles.csv contains %s, but tile is not a puzzle piece", pk)
+		}
+	}
+	for src, dest := range transporters {
+		if tiles[src] != 'O' {
+			log.Printf(
+				"Transporters.csv contains src %s, but tile is not a tp",
+				src)
+		}
+		if tiles[dest] != '.' {
+			log.Printf(
+				"Transporters.csv contains dest %s, but tile is not a blank",
+				dest)
+		}
+	}
 }
 
 func main() {
@@ -137,9 +252,9 @@ func main() {
 	ch := readLines(filepath.Join(os.Args[1], "Borders.csv"))
 	borders = readAllLines(ch)
 	for n := 1; n <= 20; n++ {
-		level(n, output)
+		doLevel(n, output)
 	}
-	transporters(output)
-	puzzle(output)
+	doTransporters(output)
+	doPuzzle(output)
 	output.Close()
 }
