@@ -42,6 +42,10 @@ func VerifyPixelColour(img image.Image, x, y int, colour color.Color) bool {
 func VerifyBlackEdge(img image.Image, x, y, dx, dy int,
 	black color.Color, grey color.Color,
 ) bool {
+    /*
+    log.Printf(os.Stderr, "Edge: %v at %d,%d, %v at %d,%d",
+        img.At(x, y), x, y, img.At(x+dx, y+dy), x+dx, y+dy)
+    */
 	return ColourMatch(img.At(x, y), black) < GOOD_MATCH &&
 		ColourMatch(img.At(x+dx, y+dy), grey) < GOOD_MATCH
 }

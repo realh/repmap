@@ -11,14 +11,16 @@ import (
 )
 
 const (
-	SEL_TILE_WIDTH         = 32
-	SEL_TILE_HEIGHT        = 32
-	SEL_TILE_BORDER        = 1
+    PIXEL_SCALE            = 2      // For hidpi
+	SEL_TILE_WIDTH         = 32 * PIXEL_SCALE
+	SEL_TILE_HEIGHT        = 32 * PIXEL_SCALE
+	SEL_TILE_BORDER        = PIXEL_SCALE
 	PADDED_SEL_TILE_WIDTH  = SEL_TILE_WIDTH + 2*SEL_TILE_BORDER
 	PADDED_SEL_TILE_HEIGHT = SEL_TILE_HEIGHT + 2*SEL_TILE_BORDER
 	SEL_COLUMNS            = 6
-	MAP_TILE_WIDTH         = 16
-	MAP_TILE_HEIGHT        = 15
+	SEL_ROWS               = 6
+	MAP_TILE_WIDTH         = 16 * PIXEL_SCALE
+	MAP_TILE_HEIGHT        = 15 * PIXEL_SCALE
 )
 
 // FindSelecters finds the extremities of the tile selecter area and also
@@ -33,9 +35,10 @@ func FindSelecters(img image.Image) (rect image.Rectangle,
 	y := (bounds.Max.Y - bounds.Min.Y) / 2
 	black := color.RGBA{0, 0, 0, 255}
 	var x int
-	// 32 * 8 is < minimum space needed to display actual map.
+	// MAP_TILE_WIDTH * 8 is < minimum space needed to display actual map.
 	// 16 allows for window border.
-	for x = bounds.Max.X - 16; x > 32*8; x-- {
+	for x = bounds.Max.X - 16 * PIXEL_SCALE; x > MAP_TILE_WIDTH*8;
+        x -= PIXEL_SCALE {
 		px := img.At(x, y)
 		if repton.ColourMatch(px, black) < repton.GOOD_MATCH {
 			break
@@ -43,38 +46,41 @@ func FindSelecters(img image.Image) (rect image.Rectangle,
 			grey = px
 		}
 	}
-	if x <= 32*8 {
+	if x <= SEL_TILE_WIDTH*8 {
 		err = fmt.Errorf("Right edge of selecter region not found")
 		return
 	}
 	rect.Max.X = x
+    //log.Printf("Right edge at (%d,%d), grey %v", x, y, grey)
 	rect.Min.X = x - PADDED_SEL_TILE_WIDTH*SEL_COLUMNS + SEL_TILE_BORDER
 	// Verify the left edge
-	if !repton.VerifyBlackEdge(img, rect.Min.X, y, -1, 0, black, grey) {
+	if !repton.VerifyBlackEdge(img,
+        rect.Min.X, y, -PIXEL_SCALE, 0, black, grey,
+    ) {
 		return rect, grey, fmt.Errorf("Left edge of selecter region not found")
 	}
 	// From here find the top edge; 100 is arbitrary; x is still right edge
 	// because left may have the white dotted outline cursor in the way
-	for ; y > 100; y-- {
+	for ; y > 100 * PIXEL_SCALE; y-- {
 		px := img.At(x, y)
 		if repton.ColourMatch(px, black) > repton.GOOD_MATCH {
 			break
 		}
 	}
-	if y <= 100 {
+	if y <= 100 * PIXEL_SCALE {
 		err = fmt.Errorf("Top edge of selecter region not found")
 		return
 	}
 	// Make sure this is a valid edge
 	y++
 	rect.Min.Y = y
-	if !repton.VerifyBlackEdge(img, x, y, 0, -1, black, grey) {
+	if !repton.VerifyBlackEdge(img, x, y, 0, -PIXEL_SCALE, black, grey) {
 		err = fmt.Errorf("Top edge of selecter region not found")
 		return
 	}
-	y += 34*6 - 1
+	y += PADDED_SEL_TILE_HEIGHT*SEL_ROWS - PIXEL_SCALE
 	rect.Max.Y = y
-	if !repton.VerifyBlackEdge(img, x, y, 0, 1, black, grey) {
+	if !repton.VerifyBlackEdge(img, x, y, 0, PIXEL_SCALE, black, grey) {
 		err = fmt.Errorf("Bottom edge of selecter region not found")
 		return
 	}
@@ -212,7 +218,8 @@ func FindMap(img image.Image, x, y int) (rect image.Rectangle, err error) {
 			continue
 		}
 		if minY1 != minY2 || maxY1 != maxY2 {
-			log.Printf("FindMapTopAndBottom mismatch at row %d: (%d,%d) vs (%d,%d)",
+			log.Printf(
+                "FindMapTopAndBottom mismatch at row %d: (%d,%d) vs (%d,%d)",
 				y+n, minY1, maxY1, minY2, maxY2)
 			continue
 		}
@@ -221,6 +228,7 @@ func FindMap(img image.Image, x, y int) (rect image.Rectangle, err error) {
 		rect.Max.X = maxX
 		rect.Min.Y = minY1
 		rect.Max.Y = maxY1
+        //log.Printf("Map bounds %v", rect)
 		break
 	}
 	if !found {
@@ -232,6 +240,7 @@ func FindMap(img image.Image, x, y int) (rect image.Rectangle, err error) {
 // GetMapColourTheme samples a particular pixel from the selecter region
 // (r) to determine the map's colour theme
 func GetMapColourTheme(img image.Image, r image.Rectangle) int {
-	return repton.DetectColourTheme(img.At(r.Min.X+5*PADDED_SEL_TILE_WIDTH+9,
-		r.Min.Y+9))
+	return repton.DetectColourTheme(img.At(
+        r.Min.X + 5*PADDED_SEL_TILE_WIDTH + 9 * PIXEL_SCALE, 
+		r.Min.Y + 9 * PIXEL_SCALE))
 }
