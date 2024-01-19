@@ -77,7 +77,7 @@ func DetectColourTheme(c color.Color) int {
 		return -1
 	}
 	if r > 0x8000 {
-		if b > 0x8000 && g < 0x8000 {
+		if b > 0x8000 {
 			return KC_MAGENTA
 		} else if g > 0x4000 {
 			return KC_ORANGE
