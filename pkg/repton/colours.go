@@ -73,8 +73,11 @@ var ColourNames = [6]string{
 func DetectColourTheme(c color.Color) int {
 	r, g, b, _ := c.RGBA()
 	//fmt.Printf("RGB (%04x, %04x, %04x)\n", r, g, b)
+	if r > 0x8000 && g > 0x8000 && b > 0x8000 {
+		return -1
+	}
 	if r > 0x8000 {
-		if b > 0x8000 {
+		if b > 0x8000 && g < 0x8000 {
 			return KC_MAGENTA
 		} else if g > 0x4000 {
 			return KC_ORANGE

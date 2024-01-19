@@ -7,3 +7,7 @@
 *.csv
 *.txt
 *.zip
+Gerald
+screenshots
+*Screenshots
+.DS_Store
