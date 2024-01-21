@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -63,7 +63,7 @@ func ProcessMap(inFilename, outFilename string, refTiles map[string][]uint32,
 	}
 	// What colour is this map?
 	cTheme := edshot.GetMapColourTheme(img, selBounds)
-	if cTheme == -1 {
+	if cTheme == -1 || cTheme == repton.KC_BLACK {
 		log.Printf("Failed to detect colour theme of '%s'", inFilename)
 		return 0
 	}
@@ -216,7 +216,7 @@ func LoadRefHashes(filename string) (map[string][]uint32, error) {
 		return nil, err
 	}
 	defer fd.Close()
-	str, err := ioutil.ReadAll(fd)
+	str, err := io.ReadAll(fd)
 	if err != nil {
 		return nil, err
 	}
