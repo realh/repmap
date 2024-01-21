@@ -148,8 +148,11 @@ func FindDominantColourInCounts(
 		description += fmt.Sprintf("Total %d, dominant %s, second %s\n",
 			total, ColourNames[bestIndex], ColourNames[secondBestIndex])
 	}
-	// blue maps tend to contain a lot of false matches for magenta
-	if 10*best < 15*secondBest &&
+	if bestIndex == KC_BLACK && secondBest != 0 {
+		description += fmt.Sprintln("Black dominant, but not uniform")
+		bestIndex = -1
+	} else if 10*best < 15*secondBest &&
+		// blue maps tend to contain a lot of false matches for magenta
 		(best == secondBest ||
 			bestIndex != KC_BLUE || secondBestIndex != KC_MAGENTA) {
 		if description != "" {
