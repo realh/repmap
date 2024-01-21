@@ -35,7 +35,7 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 	desc := filepath.Base(fileName)
 	dominantColour := repton.DetectThemeOfEntireImage(img, desc)
 	leaf := filepath.Base(fileName)
-	if dominantColour != -1 {
+	if dominantColour != -1 && dominantColour != repton.KC_BLACK {
 		fmt.Printf("Finished processing %s with colour %s\n",
 			leaf, repton.ColourNames[dominantColour])
 		ae.ColourChannel <- dominantColour

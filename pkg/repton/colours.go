@@ -60,11 +60,12 @@ const (
 	KC_MAGENTA
 	KC_ORANGE
 	KC_RED
+	KC_BLACK
 )
 
 // Colour names
-var ColourNames = [6]string{
-	"Blue", "Cyan", "Green", "Magenta", "Orange", "Red",
+var ColourNames = [7]string{
+	"Blue", "Cyan", "Green", "Magenta", "Orange", "Red", "Black",
 }
 
 // DetectColourTheme uses fuzzy logic to decide which of the above colours is
@@ -73,6 +74,9 @@ var ColourNames = [6]string{
 func DetectColourTheme(c color.Color) int {
 	r, g, b, _ := c.RGBA()
 	//fmt.Printf("RGB (%04x, %04x, %04x)\n", r, g, b)
+	if r == 0 && g == 0 && b == 0 {
+		return KC_BLACK
+	}
 	if r > 0x8000 && g > 0x8000 && b > 0x8000 {
 		return -1
 	}
@@ -99,8 +103,8 @@ func DetectColourTheme(c color.Color) int {
 func CountEachColourInImageInBounds(
 	img image.Image,
 	bounds image.Rectangle,
-) [6]int {
-	var counts [6]int
+) [7]int {
+	var counts [7]int
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			pixel := img.At(x, y)
@@ -114,7 +118,7 @@ func CountEachColourInImageInBounds(
 }
 
 func FindDominantColourInCounts(
-	counts [6]int,
+	counts [7]int,
 	description string,
 ) int {
 	total := 0
@@ -168,9 +172,9 @@ func DetectThemeOfEntireImage(img image.Image, description string) int {
 	//fmt.Printf("DetectThemeOfEntireImage: bounds %v\n", bounds)
 	height := bounds.Max.Y - bounds.Min.Y
 	rowsPerGoroutine := height / numGoroutines
-	var counts [6]int
+	var counts [7]int
 	// Each colour has its own counter goroutine
-	var counterChannels [6]chan int
+	var counterChannels [7]chan int
 	for i := range counterChannels {
 		counterChannels[i] = make(chan int, numGoroutines)
 	}
