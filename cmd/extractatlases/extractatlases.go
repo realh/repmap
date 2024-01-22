@@ -48,6 +48,7 @@ func NewImageAndReturnChan(sprite *SpriteDefinition) *ImageAndReturnChan {
 type AtlasData struct {
 	OtherDataWithKnownColours map[int]*AtlasData
 	DominantColour int
+	DominantGreens int
 	// AllDistinctSprites contains all the distinct sprites contained in a set
 	// of maps of one colour, including blank. There should be up to 33.
 	AllDistinctSprites []*SpriteDefinition
@@ -65,12 +66,13 @@ type AtlasData struct {
 // OtherDataWithKnownColours accordingly. Returns true if it's a 'new' sprite.
 func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	matched := false
-	for i, sprt := range ad.AllDistinctSprites {
+	for _, sprt := range ad.AllDistinctSprites {
 		if repton.ImagesAreEqualVerbose(
 			sprite.Image, &sprite.Region, sprt, nil,
-			sprite.Verbose && sprt.Verbose,
+			false,
+			//sprite.Verbose && sprt.Verbose,
 		) {
-			fmt.Printf("%s matched %d\n", sprite, i)
+			//fmt.Printf("%s matched %d\n", sprite, i)
 			matched = true
 			break
 		}
@@ -87,22 +89,37 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	if len(ad.AllDistinctSprites) == NUM_DISTINCT_SPRITES {
 		ad.HasAllDistinct = true
 	}
+	fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
 	// See if we need to and can detect theme colour
 	if ad.DominantColour != -1 {
-		//fmt.Printf("%s: already know dominant colour %s\n",
-		//	sprite, repton.ColourNames[ad.DominantColour])
+		fmt.Printf("Already know dominant colour %s\n",
+			repton.ColourNames[ad.DominantColour])
 		return true
 	}
 	colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
-	if colour == -1 { return true }
+	if colour == -1 {
+		fmt.Println("Can't detect dominant colour")
+		return true
+	}
+	// Repton character and green earth (grass?) are both detected as green
+	// so we can't confirm green until we have at least 3 different sprites
+	if colour == repton.KC_GREEN && ad.DominantGreens < 2 {
+		fmt.Println("Dominant colour unconfirmed green")
+		ad.DominantGreens++
+		return true
+	}
 	ad.DominantColour = colour
 	other := ad.OtherDataWithKnownColours[colour]
 	if other == nil {
 		// This ad is the main AtlasData for colour
+		fmt.Printf("This is first file with dominant colour %s\n",
+			repton.ColourNames[ad.DominantColour])
 		ad.OtherDataWithKnownColours[colour] = ad
 		return true
 	}
 	// This ad needs to be merged into other
+	fmt.Printf("Forwarding to dominant colour %s\n",
+		repton.ColourNames[ad.DominantColour])
 	ad.forwardTo = other
 	for _, sprt := range ad.AllDistinctSprites {
 		if other.HasAllDistinct { break }
@@ -191,10 +208,10 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 					y == 0 && slices.Contains(dirts, x),
 				}
 				//fmt.Printf("Processing %s (%d,%d)\n", sprite, x, y)
-				//ad.AddImage(sprite)
-				added := ad.AddImage(sprite)
-				fmt.Printf("Processed %s (%d,%d), added %v, HasAll %v\n",
-					sprite, x, y, added, ad.HasAllDistinct)
+				ad.AddImage(sprite)
+				//added := ad.AddImage(sprite)
+				//fmt.Printf("Processed %s (%d,%d), added %v, HasAll %v\n",
+				//	sprite, x, y, added, ad.HasAllDistinct)
 				//var unique string
 				//if added {
 				//	unique = "unique"
