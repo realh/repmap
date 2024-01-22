@@ -137,7 +137,7 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 // adds itself to the map or combines itself with an existing one then forwards
 // to it.
 func (ad *AtlasData) Initialise(dataWithKnownColours map[int]*AtlasData) {
-	ad.OtherDataWithKnownColours = make(map[int]*AtlasData)
+	ad.OtherDataWithKnownColours = dataWithKnownColours
 	ad.DominantColour = -1
 	ad.adderChan = make(chan *ImageAndReturnChan, 6)
 	go func(ch chan *ImageAndReturnChan) {
@@ -277,5 +277,6 @@ func main() {
 		os.Exit(1)
 	}
 	ae := AtlasExtractor{}
+	ae.DataSetsWithKnownColours = make(map[int]*AtlasData)
 	ae.Start(os.Args[1])
 }
