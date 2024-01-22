@@ -5,6 +5,7 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/realh/repmap/pkg/repton"
@@ -19,11 +20,13 @@ import (
 // that order is undefined.
 
 const NUM_DISTINCT_SPRITES = 33
+const SPRITE_SIZE = 64
 
 type SpriteDefinition struct {
 	image.Image
 	Region image.Rectangle
 	LeafName string
+	Verbose bool
 }
 
 func (sd *SpriteDefinition) String() string {
@@ -62,9 +65,12 @@ type AtlasData struct {
 // OtherDataWithKnownColours accordingly. Returns true if it's a 'new' sprite.
 func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	matched := false
-	for _, sprt := range ad.AllDistinctSprites {
-		if repton.ImagesAreEqual(sprite.Image, &sprite.Region, sprt, nil) {
-			//fmt.Printf("%s matched %d\n", sprite, i)
+	for i, sprt := range ad.AllDistinctSprites {
+		if repton.ImagesAreEqualVerbose(
+			sprite.Image, &sprite.Region, sprt, nil,
+			sprite.Verbose && sprt.Verbose,
+		) {
+			fmt.Printf("%s matched %d\n", sprite, i)
 			matched = true
 			break
 		}
@@ -75,6 +81,7 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 		newImg,
 		newImg.Bounds(),
 		sprite.LeafName + "_",
+		sprite.Verbose,
 	}
 	ad.AllDistinctSprites = append(ad.AllDistinctSprites, newSprt)
 	if len(ad.AllDistinctSprites) == NUM_DISTINCT_SPRITES {
@@ -142,14 +149,12 @@ func (ad *AtlasData) Initialise(dataWithKnownColours map[int]*AtlasData) {
 // AddImage calls addImage using channels for thread-safety.
 func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 	if ad.HasAllDistinct {
-		//fmt.Printf("AddImage(%s): allDistinct, returning false\n", sprite)
 		return false
 	}
 	imageAndReturnChan := NewImageAndReturnChan(sprite)
 	ad.adderChan <- imageAndReturnChan
 	result := <- imageAndReturnChan.ReturnChan
 	close(imageAndReturnChan.ReturnChan)
-	//fmt.Printf("AddImage(%s): !allDistinct, result %v\n", sprite, result)
 	return result
 }
 
@@ -159,6 +164,7 @@ type AtlasExtractor struct {
 }
 
 func (ae *AtlasExtractor) ProcessFile(fileName string) {
+	dirts := []int{1, 2, 16, 26, 28, 30}
 	img, error := repton.LoadImage(fileName)
 	if error != nil {
 		fmt.Println(error)
@@ -170,26 +176,31 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 	leafName := filepath.Base(fileName)
 	go func() {
 		bounds := img.Bounds()
-		numColumns := bounds.Max.X - bounds.Min.X
-		numRows := bounds.Max.Y - bounds.Min.Y
+		numColumns := (bounds.Max.X - bounds.Min.X) / SPRITE_SIZE
+		numRows := (bounds.Max.Y - bounds.Min.Y) / SPRITE_SIZE
+		fmt.Printf("Processing %dx%d sprites in %s\n",
+			numColumns, numRows, fileName)
 		for y := 0; y < numRows && !ad.HasAllDistinct; y++ {
-			y0 := y * 64
-			y1 := y0 + 64
+			y0 := y * SPRITE_SIZE
+			y1 := y0 + SPRITE_SIZE
 			for x := 0; x < numColumns && !ad.HasAllDistinct; x++ {
-				x0 := x * 64
-				x1 := x0 + 64
+				x0 := x * SPRITE_SIZE
+				x1 := x0 + SPRITE_SIZE
 				sprite := &SpriteDefinition{
 					img, image.Rect(x0, y0, x1, y1), leafName,
+					y == 0 && slices.Contains(dirts, x),
 				}
-				ad.AddImage(sprite)
-				//added := ad.AddImage(sprite)
+				//fmt.Printf("Processing %s (%d,%d)\n", sprite, x, y)
+				//ad.AddImage(sprite)
+				added := ad.AddImage(sprite)
+				fmt.Printf("Processed %s (%d,%d), added %v, HasAll %v\n",
+					sprite, x, y, added, ad.HasAllDistinct)
 				//var unique string
 				//if added {
 				//	unique = "unique"
 				//} else {
 				//	unique = "not unique"
 				//}
-				//fmt.Printf("%8s (%2d, %2d) %s\n", leafName, x, y, unique)
 			}
 		}
 		ae.Wg.Done()
@@ -229,7 +240,8 @@ func (ae *AtlasExtractor) Finish() {
 }
 
 func (ae *AtlasExtractor) Start(directory string) {
-	repton.ProcessDirectory(directory+"/[0-9]*.png", ae, 6)
+	//repton.ProcessDirectory(directory+"/[0-9]*.png", ae, 6)
+	repton.ProcessDirectory(directory+"/1.png", ae, 6)
 }
 
 func (ae *AtlasExtractor) StartBatch() {

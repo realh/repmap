@@ -10,16 +10,35 @@ import (
 // ImageCompare returns true if the content of both regions is the same.
 // Either or both regions may be nil to compare the entire image. Returns
 // true if both images are the same.
-func ImagesAreEqual(img1 image.Image, region1 *image.Rectangle,
-	img2 image.Image, region2 *image.Rectangle,
+func ImagesAreEqualVerbose(img1 image.Image, region1 *image.Rectangle,
+	img2 image.Image, region2 *image.Rectangle, verbose bool,
 ) bool {
+	whole1 := false
 	if region1 == nil {
 		r1 := img1.Bounds()
 		region1 = &r1
+		whole1 = true
 	}
+	whole2 := false
 	if region2 == nil {
 		r2 := img2.Bounds()
 		region2 = &r2
+		whole2 = true
+	}
+	if verbose {
+		r1desc := fmt.Sprintf("%v", region1)
+		if whole1 {
+			r1desc += " (whole)"
+		} else {
+			r1desc += fmt.Sprintf(" (from %v)", img1.Bounds())
+		}
+		r2desc := fmt.Sprintf("%v", region2)
+		if whole2 {
+			r2desc += " (whole)"
+		} else {
+			r2desc += fmt.Sprintf(" (from %v)", img2.Bounds())
+		}
+		fmt.Printf("Comparing regions %v and %v\n", r1desc, r2desc)
 	}
 	width := region1.Max.X - region1.Min.X
 	if width != region2.Max.X - region2.Min.X { return false }
@@ -31,10 +50,24 @@ func ImagesAreEqual(img1 image.Image, region1 *image.Rectangle,
 		for x := 0; x < width; x++ {
 			x1 := region1.Min.X + x
 			x2 := region2.Min.X + x
-			if img1.At(x1, y1) != img2.At(x2, y2) { return false }
+			at1 := img1.At(x1, y1)
+			at2 := img2.At(x2, y2)
+			equal := ColoursAreEqual(at1, at2)
+			if verbose {
+				fmt.Printf("  [%-2d,%2d] (%-4d,%4d) vs (%-4d,%4d) : " +
+					"%v vs %v (equal %v)\n",
+					x, y, x1, y1, x2, y2, at1, at2, equal)
+			}
+			if !equal { return false }
 		}
 	}
 	return true
+}
+
+func ImagesAreEqual(img1 image.Image, region1 *image.Rectangle,
+	img2 image.Image, region2 *image.Rectangle,
+) bool {
+	return ImagesAreEqualVerbose(img1, region1, img2, region2, false)
 }
 
 func SubImage(img image.Image, region *image.Rectangle) image.Image {

@@ -16,6 +16,12 @@ const (
 	GOOD_MATCH = 0.001
 )
 
+func ColoursAreEqual(c1 color.Color, c2 color.Color) bool {
+	r1, g1, b1, a1 := c1.RGBA()
+	r2, g2, b2, a2 := c2.RGBA()
+	return r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2
+}
+
 // SqByteDiff returns the square of the difference between two colour words
 // normalised from range (0-65535) to (0.0-1.0). The bytes are actually uint32
 // with 16-bits of precision because that's what Color.RGBA returns.
