@@ -89,9 +89,9 @@ func DetectColourTheme(c color.Color) int {
 	if r > 0x8000 {
 		if b > 0x8000 {
 			return KC_MAGENTA
-		} else if g > 0x4000 {
+		} else if g > 0x8000 && b < 0x4000 {
 			return KC_ORANGE
-		} else {
+		} else if b < 0x4000 {
 			return KC_RED
 		}
 	} else if g > 0x8000 {
@@ -157,7 +157,7 @@ func FindDominantColourInCounts(
 	if bestIndex == KC_BLACK && secondBest != 0 {
 		description += fmt.Sprintln("Black dominant, but not uniform")
 		bestIndex = -1
-	} else if 10*best < 15*secondBest &&
+	} else if 10*best <= 15*secondBest &&
 		// blue maps tend to contain a lot of false matches for magenta
 		(best == secondBest ||
 			bestIndex != KC_BLUE || secondBestIndex != KC_MAGENTA) {

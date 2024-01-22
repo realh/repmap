@@ -177,15 +177,14 @@ func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 		ad.HasAllDistinct = true
 	}
 	ad.lock.Unlock()
-	//fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
+	fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
 	// See if we need to and can detect theme colour
 	if ad.DominantColour != -1 {
-		//fmt.Printf("Already know dominant colour %s\n",
-		//	repton.ColourNames[ad.DominantColour])
+		fmt.Printf("Already know dominant colour of %s\n", ad)
 		return true
 	}
-	//colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
-	colour := repton.DetectThemeOfEntireImage(newSprt, "")
+	colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
+	//colour := repton.DetectThemeOfEntireImage(newSprt, "")
 	if colour == -1 {
 		//fmt.Println("Can't detect dominant colour")
 		return true
@@ -196,7 +195,7 @@ func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 	// Repton character and green earth (grass?) are both detected as green
 	// so we can't confirm green until we have at least 3 different sprites
 	if colour == repton.KC_GREEN && ad.DominantGreens < 2 {
-		//fmt.Println("Dominant colour unconfirmed green")
+		fmt.Printf("Dominant colour of %s unconfirmed green\n", ad)
 		ad.DominantGreens++
 		return true
 	}
@@ -204,14 +203,13 @@ func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 	other := ad.OtherDataWithKnownColours[colour]
 	if other == nil {
 		// This ad is the main AtlasData for colour
-		fmt.Printf("%s is first file with dominant colour %s\n",
-			sprite.LeafName, repton.ColourNames[ad.DominantColour])
+		fmt.Printf("%s is sink for dominant colour %s\n",
+			ad, repton.ColourNames[ad.DominantColour])
 		ad.OtherDataWithKnownColours[colour] = ad
 		return true
 	}
 	// This ad needs to be merged into other
-	fmt.Printf("%s forwarding to dominant colour %s\n",
-		sprite.LeafName, repton.ColourNames[ad.DominantColour])
+	fmt.Printf("%s forwarding to %s\n", ad, other)
 	ad.forwardTo = other
 	if !other.HasAllDistinct {
 		for _, sprt := range ad.AllDistinctSprites {
@@ -260,8 +258,7 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 	}
 	ae.Wg.Add(1)
 	ae.WgCount++
-	fmt.Printf("ProcessFile starting %s, increased wg count to %d\n",
-		fileName, ae.WgCount)
+	fmt.Printf("ProcessFile starting on %s\n", fileName)
 	ad := &AtlasData{}
 	leafName := filepath.Base(fileName)
 	ad.Initialise(leafName, ae.DataSetsWithKnownColours, ae)
@@ -296,8 +293,7 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 		}
 		ae.Wg.Done()
 		ae.WgCount--
-		fmt.Printf("ProcessFile finished %s, decreased wg count to %d\n",
-			ad, ae.WgCount)
+		fmt.Printf("ProcessFile finished %s\n", ad)
 	}()
 }
 
@@ -376,8 +372,7 @@ func DeadlocksAreEquivalent(m2 map[string]bool) bool {
 func (ae *AtlasExtractor) FinishBatch() {
 	ae.Wg.Done()
 	ae.WgCount--
-	fmt.Printf("Finished batch, waiting for image processors, wg count %d\n",
-		ae.WgCount)
+	fmt.Println("Finished batch, waiting for image processors")
 	ae.Wg.Wait()
 	ae.Finish()
 }
