@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,34 @@ import (
 const NUM_DISTINCT_SPRITES = 33
 const SPRITE_SIZE = 64
 
+var possibleDeadlocks = make(map[string]bool)
+var pdMutex = sync.Mutex{}
+
+type Lockable interface {
+	Lock()
+	Unlock()
+}
+
+func EnterPossibleDeadlock(s string) {
+	pdMutex.Lock()
+	defer pdMutex.Unlock()
+	if possibleDeadlocks[s] == true {
+		s = fmt.Sprintf("Multiple entry of deadlocker %s", s)
+		panic(s)
+	}
+	possibleDeadlocks[s] = true
+}
+
+func LeavePossibleDeadlock(s string) {
+	pdMutex.Lock()
+	defer pdMutex.Unlock()
+	if possibleDeadlocks[s] != true {
+		s = fmt.Sprintf("Multiple leave of deadlocker %s", s)
+		panic(s)
+	}
+	delete(possibleDeadlocks, s)
+}
+
 type SpriteDefinition struct {
 	image.Image
 	Region image.Rectangle
@@ -38,15 +67,10 @@ type ImageAndReturnChan struct {
 	ReturnChan chan bool
 }
 
-func NewImageAndReturnChan(sprite *SpriteDefinition) *ImageAndReturnChan {
-	return &ImageAndReturnChan{
-		sprite,
-		make(chan bool),
-	}
-}
-
 type AtlasData struct {
+	Name string
 	OtherDataWithKnownColours map[int]*AtlasData
+	OtherDataLock Lockable
 	DominantColour int
 	DominantGreens int
 	// AllDistinctSprites contains all the distinct sprites contained in a set
@@ -56,15 +80,76 @@ type AtlasData struct {
 	// ThemedSprites contains all the sprites that are unique to the theme.
 	// There should be up to 27.
 	ThemedSprites []*SpriteDefinition
-	adderChan chan *ImageAndReturnChan
-	// Once we detect a colour we can 
+	// Once we detect a colour we can multiplex multiple files of the same
+	// colour into one AtlasData.
 	forwardTo *AtlasData
+	// When multiplexing we need to use a mutex on the sink.
+	lock sync.Mutex
+	// And addQueue helps with using the lock and threading efficiently.
+	addQueue []*SpriteDefinition
+	queueLock sync.Mutex
 }
 
-// doAddImage checks whether this sprite is unique to the AtlasData. If it is
+func (ad *AtlasData) String() string {
+	c := ad.DominantColour
+	var colour string
+	if c != -1 {
+		colour = repton.ColourNames[c]
+	} else {
+		colour = "unk"
+	}
+	var complete string
+	if ad.HasAllDistinct {
+		complete = "complete"
+	} else {
+		complete = fmt.Sprintf("%d", len(ad.AllDistinctSprites))
+	}
+	s := fmt.Sprintf("AD[%s, %s, %s]", ad.Name, colour, complete)
+	if ad.forwardTo != nil {
+		s = fmt.Sprintf("%s -> %v", s, ad.forwardTo)
+	}
+	return s
+}
+
+// AddImage checks whether this sprite is unique to the AtlasData. If it is
 // it gets added. This also checks the colour and adds/merges itself in 
 // OtherDataWithKnownColours accordingly. Returns true if it's a 'new' sprite.
-func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
+func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
+	if ad.forwardTo != nil {
+		result := ad.forwardTo.AddImage(sprite)
+		if ad.forwardTo.HasAllDistinct {
+			ad.HasAllDistinct = true
+		}
+		return result
+	}
+	ad.queueLock.Lock()
+	for _, sprt := range ad.AllDistinctSprites {
+		if repton.ImagesAreEqual(
+			sprite.Image, &sprite.Region, sprt, nil,
+		) {
+			// This sprite is already being worked on. We don't know
+			// whether it will be added, and we don't want to wait, just
+			//  return false.
+			ad.queueLock.Unlock()
+			return false
+		}
+	}
+	ad.addQueue = append(ad.addQueue, sprite)
+	ad.queueLock.Unlock()
+	// If we leave the sprite in the (unlocked) addQueue until the end of
+	// this function we can hold the main lock for much shorter periods
+	// without potentially working on indentical sprites concurrently.
+	defer func() {
+		ad.queueLock.Lock()
+		for i, s := range ad.addQueue {
+			if s == sprite {
+				ad.addQueue = slices.Delete(ad.addQueue, i, i + 1)
+				break
+			}
+		}
+		ad.queueLock.Unlock()
+	}()
+
 	matched := false
 	for _, sprt := range ad.AllDistinctSprites {
 		if repton.ImagesAreEqualVerbose(
@@ -78,6 +163,7 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 		}
 	}
 	if matched { return false }
+
 	newImg := repton.SubImage(sprite.Image, &sprite.Region)
 	newSprt := &SpriteDefinition{
 		newImg,
@@ -85,10 +171,12 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 		sprite.LeafName + "_",
 		sprite.Verbose,
 	}
+	ad.lock.Lock()
 	ad.AllDistinctSprites = append(ad.AllDistinctSprites, newSprt)
 	if len(ad.AllDistinctSprites) == NUM_DISTINCT_SPRITES {
 		ad.HasAllDistinct = true
 	}
+	ad.lock.Unlock()
 	//fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
 	// See if we need to and can detect theme colour
 	if ad.DominantColour != -1 {
@@ -102,6 +190,9 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 		//fmt.Println("Can't detect dominant colour")
 		return true
 	}
+	// From now on it's best to hold the lock.
+	ad.lock.Lock()
+	defer ad.lock.Unlock()
 	// Repton character and green earth (grass?) are both detected as green
 	// so we can't confirm green until we have at least 3 different sprites
 	if colour == repton.KC_GREEN && ad.DominantGreens < 2 {
@@ -122,9 +213,11 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	fmt.Printf("%s forwarding to dominant colour %s\n",
 		sprite.LeafName, repton.ColourNames[ad.DominantColour])
 	ad.forwardTo = other
-	for _, sprt := range ad.AllDistinctSprites {
-		if other.HasAllDistinct { break }
-		other.AddImage(sprt)
+	if !other.HasAllDistinct {
+		for _, sprt := range ad.AllDistinctSprites {
+			if other.HasAllDistinct { break }
+			other.AddImage(sprt)
+		}
 	}
 	if other.HasAllDistinct { ad.HasAllDistinct = true }
 	ad.AllDistinctSprites = nil
@@ -137,49 +230,26 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 // represented theme. An AtlasData starts with unknown (-1) DominantColour then
 // adds itself to the map or combines itself with an existing one then forwards
 // to it.
-func (ad *AtlasData) Initialise(dataWithKnownColours map[int]*AtlasData) {
+func (ad *AtlasData) Initialise(
+	name string,
+	dataWithKnownColours map[int]*AtlasData,
+	coloursDataLock Lockable,
+) {
+	ad.Name = name
 	ad.OtherDataWithKnownColours = dataWithKnownColours
+	ad.OtherDataLock = coloursDataLock
 	ad.DominantColour = -1
-	ad.adderChan = make(chan *ImageAndReturnChan, 6)
-	go func(ch chan *ImageAndReturnChan) {
-		var result bool
-		for !ad.HasAllDistinct {
-			ic := <-ch
-			if ic == nil {
-				if ad.forwardTo != nil {
-					ad.forwardTo.adderChan <- nil
-				}
-				break
-			} else if ad.forwardTo != nil {
-				result = ad.forwardTo.AddImage(ic.SpriteDefinition)
-			} else {
-				result = ad.doAddImage(ic.SpriteDefinition)
-			}
-			if ic != nil { ic.ReturnChan <- result }
-		}
-		if ad.adderChan != nil {
-			close(ad.adderChan)
-			ad.adderChan = nil
-		}
-	}(ad.adderChan)
-}
-
-// AddImage calls addImage using channels for thread-safety.
-func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
-	if ad.HasAllDistinct {
-		return false
-	}
-	imageAndReturnChan := NewImageAndReturnChan(sprite)
-	ad.adderChan <- imageAndReturnChan
-	result := <- imageAndReturnChan.ReturnChan
-	close(imageAndReturnChan.ReturnChan)
-	return result
 }
 
 type AtlasExtractor struct {
 	DataSetsWithKnownColours map[int]*AtlasData
-	Wg               *sync.WaitGroup
+	ColoursDataLock sync.Mutex
+	Wg *sync.WaitGroup
+	WgCount int
 }
+
+func (ae *AtlasExtractor) Lock() { ae.ColoursDataLock.Lock() }
+func (ae *AtlasExtractor) Unlock() { ae.ColoursDataLock.Unlock() }
 
 func (ae *AtlasExtractor) ProcessFile(fileName string) {
 	dirts := []int{1, 2, 16, 26, 28, 30}
@@ -189,9 +259,12 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 		return
 	}
 	ae.Wg.Add(1)
+	ae.WgCount++
+	fmt.Printf("ProcessFile starting %s, increased wg count to %d\n",
+		fileName, ae.WgCount)
 	ad := &AtlasData{}
-	ad.Initialise(ae.DataSetsWithKnownColours)
 	leafName := filepath.Base(fileName)
+	ad.Initialise(leafName, ae.DataSetsWithKnownColours, ae)
 	go func() {
 		bounds := img.Bounds()
 		numColumns := (bounds.Max.X - bounds.Min.X) / SPRITE_SIZE
@@ -222,6 +295,9 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 			}
 		}
 		ae.Wg.Done()
+		ae.WgCount--
+		fmt.Printf("ProcessFile finished %s, decreased wg count to %d\n",
+			ad, ae.WgCount)
 	}()
 }
 
@@ -263,11 +339,47 @@ func (ae *AtlasExtractor) Start(directory string) {
 
 func (ae *AtlasExtractor) StartBatch() {
 	ae.Wg = &sync.WaitGroup{}
+	ae.Wg.Add(1)
+	ae.WgCount = 1
+}
+
+func ListDeadlocks(s string) {
+	pdMutex.Lock()
+	defer pdMutex.Unlock()
+	if len(possibleDeadlocks) == 0 { return }
+	fmt.Println(s)
+	for d, b := range possibleDeadlocks {
+		if !b { continue }
+		fmt.Println("  ", d)
+	}
+	fmt.Println("****")
+}
+
+func CopyDeadlocks() map[string]bool {
+	pdMutex.Lock()
+	defer pdMutex.Unlock()
+	m2 := make(map[string]bool)
+	maps.Copy(possibleDeadlocks, m2)
+	return m2
+}
+
+func DeadlocksAreEquivalent(m2 map[string]bool) bool {
+	pdMutex.Lock()
+	defer pdMutex.Unlock()
+	if len(possibleDeadlocks) != len(m2) { return false }
+	for s := range possibleDeadlocks {
+		if m2[s] != true { return false }
+	}
+	return true
 }
 
 func (ae *AtlasExtractor) FinishBatch() {
-	fmt.Println("Finished batch, waiting for image processors")
+	ae.Wg.Done()
+	ae.WgCount--
+	fmt.Printf("Finished batch, waiting for image processors, wg count %d\n",
+		ae.WgCount)
 	ae.Wg.Wait()
+	ae.Finish()
 }
 
 func main() {
