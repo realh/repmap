@@ -177,14 +177,14 @@ func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 		ad.HasAllDistinct = true
 	}
 	ad.lock.Unlock()
-	fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
+	//fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
 	// See if we need to and can detect theme colour
 	if ad.DominantColour != -1 {
-		fmt.Printf("Already know dominant colour of %s\n", ad)
+		//fmt.Printf("Already know dominant colour of %s\n", ad)
 		return true
 	}
-	colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
-	//colour := repton.DetectThemeOfEntireImage(newSprt, "")
+	//colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
+	colour := repton.DetectThemeOfEntireImage(newSprt, "")
 	if colour == -1 {
 		//fmt.Println("Can't detect dominant colour")
 		return true
@@ -195,7 +195,7 @@ func (ad *AtlasData) AddImage(sprite *SpriteDefinition) bool {
 	// Repton character and green earth (grass?) are both detected as green
 	// so we can't confirm green until we have at least 3 different sprites
 	if colour == repton.KC_GREEN && ad.DominantGreens < 2 {
-		fmt.Printf("Dominant colour of %s unconfirmed green\n", ad)
+		//fmt.Printf("Dominant colour of %s unconfirmed green\n", ad)
 		ad.DominantGreens++
 		return true
 	}
@@ -374,7 +374,6 @@ func (ae *AtlasExtractor) FinishBatch() {
 	ae.WgCount--
 	fmt.Println("Finished batch, waiting for image processors")
 	ae.Wg.Wait()
-	ae.Finish()
 }
 
 func main() {
