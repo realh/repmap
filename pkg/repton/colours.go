@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"math"
 	"sync"
+
+	"github.com/crazy3lf/colorconv"
 )
 
 const (
@@ -74,35 +76,18 @@ var ColourNames = [7]string{
 	"Blue", "Cyan", "Green", "Magenta", "Orange", "Red", "Black",
 }
 
-// DetectColourTheme uses fuzzy logic to decide which of the above colours is
-// the closest match for the input, returning an index into ColourNames or -1
-// for no match.
+// DetectColourTheme detects which of the above colours is the closest match for
+// the input, returning an index into ColourNames, or -1 for no (close) match.
 func DetectColourTheme(c color.Color) int {
-	r, g, b, _ := c.RGBA()
-	//fmt.Printf("RGB (%04x, %04x, %04x)\n", r, g, b)
-	if r == 0 && g == 0 && b == 0 {
-		return KC_BLACK
-	}
-	if r > 0x8000 && g > 0x8000 && b > 0x8000 {
-		return -1
-	}
-	if r > 0x8000 {
-		if b > 0x8000 {
-			return KC_MAGENTA
-		} else if g > 0x8000 && b < 0x4000 {
-			return KC_ORANGE
-		} else if b < 0x4000 {
-			return KC_RED
-		}
-	} else if g > 0x8000 {
-		if b > 0x8000 {
-			return KC_CYAN
-		} else {
-			return KC_GREEN
-		}
-	} else if b > 0x8000 {
-		return KC_BLUE
-	}
+	h, s, l := colorconv.ColorToHSL(c)
+	if l < 0.0000001 { return KC_BLACK }
+	if s < 0.8 { return -1 }
+	if h >= 230 && h <= 250 { return KC_BLUE }
+	if h <= 10 || h >= 350 { return KC_RED }
+	if h >= 110 && h <= 130 { return KC_GREEN }
+	if h >= 290 && h <= 310 { return KC_MAGENTA }
+	if h >= 170 && h <= 190 { return KC_CYAN }
+	if h >= 20 && h <= 40 { return KC_ORANGE }
 	return -1
 }
 
