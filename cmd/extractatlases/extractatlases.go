@@ -88,6 +88,7 @@ type AtlasData struct {
 	// And addQueue helps with using the lock and threading efficiently.
 	addQueue []*SpriteDefinition
 	queueLock sync.Mutex
+	StartedFilteringSprites bool
 }
 
 func (ad *AtlasData) String() string {
@@ -243,6 +244,10 @@ type AtlasExtractor struct {
 	DataSetsWithKnownColours map[int]*AtlasData
 	ColoursDataLock sync.Mutex
 	Wg *sync.WaitGroup
+	CommonSprites []*SpriteDefinition
+	CommonSpritesLock sync.Mutex
+	CommonSpritesWg *sync.WaitGroup
+	StartedCommonSprites bool
 }
 
 func (ae *AtlasExtractor) Lock() { ae.ColoursDataLock.Lock() }
@@ -367,8 +372,117 @@ func DeadlocksAreEquivalent(m2 map[string]bool) bool {
 
 func (ae *AtlasExtractor) FinishBatch() {
 	ae.Wg.Done()
-	fmt.Println("Finished batch, waiting for image processors")
+	//fmt.Println("**** Finished batch, waiting for image processors ****")
 	ae.Wg.Wait()
+	fmt.Println("**** Finished batch, waiting for image processors ****")
+	if len(ae.DataSetsWithKnownColours) < 2 {
+		fmt.Println("Not enough data sets to find common sprites")
+		return
+	}
+	ae.CommonSpritesLock.Lock()
+	defer ae.CommonSpritesLock.Unlock()
+	complete1 := -1
+	complete2 := -1
+	if !ae.StartedCommonSprites {
+		for i, ad := range ae.DataSetsWithKnownColours {
+			if ad.HasAllDistinct {
+				if complete1 == -1 {
+					complete1 = i
+				} else if complete2 == -1 {
+					complete2 = i
+					break
+				}
+			}
+		}
+		if complete2 == -1 {
+			fmt.Println("Not enough complete sets to find common sprites")
+			return
+		}
+		fmt.Printf("%s and %s complete, finding common sprites\n",
+			ae.DataSetsWithKnownColours[complete1],
+			ae.DataSetsWithKnownColours[complete2])
+		ae.CommonSpritesWg = &sync.WaitGroup{}
+		ae.StartedCommonSprites = true
+		ae.IsolateCommonSprites(complete1, complete2)
+		return
+	}
+	if ae.CommonSpritesWg != nil {
+		fmt.Println("Waiting for previous CommonSprites job")
+		ae.CommonSpritesWg.Wait()
+		fmt.Printf("Identified %d common sprites\n", len(ae.CommonSprites))
+		ae.CommonSpritesWg = nil
+	} else {
+		fmt.Println("No previous CommonSprites job")
+	}
+}
+
+func (ae *AtlasExtractor) IsolateCommonSprites(i1, i2 int) {
+	ae.CommonSpritesWg.Add(1)
+	go func() {
+		ad1 := ae.DataSetsWithKnownColours[i1]
+		ad1.StartedFilteringSprites = true
+		var ad2 *AtlasData
+		if i2 == -1 {
+			ad2 = nil
+		} else {
+			ad2 = ae.DataSetsWithKnownColours[i2]
+			ad2.StartedFilteringSprites = true
+		}
+		ae.SeparateCommonSprites(ad1, ad2)
+		ae.CommonSpritesWg.Done()
+	}()
+}
+
+// SeparateCommonSprites finds sprites which are common to ad1 and ad2
+// or to ad1 and ae.CommonSprites. The remaining unique sprites are copied into 
+// ad1.ThemedSprites, and the same for ad2 if non-nil.
+// If ad2 is nil, sprites in ad1 are tested against ae.CommonSprites, otherwise
+// common sprites are copied to ae.CommonSprites.
+func (ae *AtlasExtractor) SeparateCommonSprites(
+	ad1 *AtlasData, ad2 *AtlasData,
+) {
+	var commonIn2 []int
+	var ref []*SpriteDefinition
+	if ad2 == nil {
+		ref = ae.CommonSprites
+	} else {
+		ref = ad2.AllDistinctSprites
+	}
+	for _, s1 := range ad1.AllDistinctSprites {
+		matched := false
+		for i2, s2 := range ref {
+			if repton.ImagesAreEqual(s1.Image, &s1.Region,
+				s2.Image, &s2.Region) {
+				matched = true
+				if ad2 != nil {
+					commonIn2 = append(commonIn2, i2)
+				}
+				break
+			}
+		}
+		if matched {
+			if ad2 != nil {
+				ae.CommonSprites = append(ae.CommonSprites, s1)
+			}
+		} else {
+			ad1.ThemedSprites = append(ad1.ThemedSprites, s1)
+		}
+	}
+	if ad2 != nil {
+		slices.Sort(commonIn2)
+		j := 0
+		k := commonIn2[j]
+		for i, s := range ad2.AllDistinctSprites {
+			if i == k {
+				j++
+				if j < len(commonIn2) {
+					k = commonIn2[j]
+				}
+			} else {
+				ad2.ThemedSprites = append(ad2.ThemedSprites, s)
+			}
+		}
+	}
 }
 
 func main() {
