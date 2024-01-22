@@ -258,8 +258,7 @@ func (ae *AtlasExtractor) Finish() {
 }
 
 func (ae *AtlasExtractor) Start(directory string) {
-	//repton.ProcessDirectory(directory+"/[0-9]*.png", ae, 6)
-	repton.ProcessDirectory(directory+"/1.png", ae, 6)
+	repton.ProcessDirectory(directory+"/[0-9]*.png", ae, 6)
 }
 
 func (ae *AtlasExtractor) StartBatch() {
