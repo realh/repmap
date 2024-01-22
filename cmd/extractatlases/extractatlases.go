@@ -243,7 +243,6 @@ type AtlasExtractor struct {
 	DataSetsWithKnownColours map[int]*AtlasData
 	ColoursDataLock sync.Mutex
 	Wg *sync.WaitGroup
-	WgCount int
 }
 
 func (ae *AtlasExtractor) Lock() { ae.ColoursDataLock.Lock() }
@@ -257,7 +256,6 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 		return
 	}
 	ae.Wg.Add(1)
-	ae.WgCount++
 	fmt.Printf("ProcessFile starting on %s\n", fileName)
 	ad := &AtlasData{}
 	leafName := filepath.Base(fileName)
@@ -292,7 +290,6 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 			}
 		}
 		ae.Wg.Done()
-		ae.WgCount--
 		fmt.Printf("ProcessFile finished %s\n", ad)
 	}()
 }
@@ -336,7 +333,6 @@ func (ae *AtlasExtractor) Start(directory string) {
 func (ae *AtlasExtractor) StartBatch() {
 	ae.Wg = &sync.WaitGroup{}
 	ae.Wg.Add(1)
-	ae.WgCount = 1
 }
 
 func ListDeadlocks(s string) {
@@ -371,7 +367,6 @@ func DeadlocksAreEquivalent(m2 map[string]bool) bool {
 
 func (ae *AtlasExtractor) FinishBatch() {
 	ae.Wg.Done()
-	ae.WgCount--
 	fmt.Println("Finished batch, waiting for image processors")
 	ae.Wg.Wait()
 }
