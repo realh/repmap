@@ -89,22 +89,23 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	if len(ad.AllDistinctSprites) == NUM_DISTINCT_SPRITES {
 		ad.HasAllDistinct = true
 	}
-	fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
+	//fmt.Printf("%s is unique sprite %d\n", sprite, len(ad.AllDistinctSprites))
 	// See if we need to and can detect theme colour
 	if ad.DominantColour != -1 {
-		fmt.Printf("Already know dominant colour %s\n",
-			repton.ColourNames[ad.DominantColour])
+		//fmt.Printf("Already know dominant colour %s\n",
+		//	repton.ColourNames[ad.DominantColour])
 		return true
 	}
-	colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
+	//colour := repton.DetectThemeOfEntireImage(newSprt, newSprt.String())
+	colour := repton.DetectThemeOfEntireImage(newSprt, "")
 	if colour == -1 {
-		fmt.Println("Can't detect dominant colour")
+		//fmt.Println("Can't detect dominant colour")
 		return true
 	}
 	// Repton character and green earth (grass?) are both detected as green
 	// so we can't confirm green until we have at least 3 different sprites
 	if colour == repton.KC_GREEN && ad.DominantGreens < 2 {
-		fmt.Println("Dominant colour unconfirmed green")
+		//fmt.Println("Dominant colour unconfirmed green")
 		ad.DominantGreens++
 		return true
 	}
@@ -112,14 +113,14 @@ func (ad *AtlasData) doAddImage(sprite *SpriteDefinition) bool {
 	other := ad.OtherDataWithKnownColours[colour]
 	if other == nil {
 		// This ad is the main AtlasData for colour
-		fmt.Printf("This is first file with dominant colour %s\n",
-			repton.ColourNames[ad.DominantColour])
+		fmt.Printf("%s is first file with dominant colour %s\n",
+			sprite.LeafName, repton.ColourNames[ad.DominantColour])
 		ad.OtherDataWithKnownColours[colour] = ad
 		return true
 	}
 	// This ad needs to be merged into other
-	fmt.Printf("Forwarding to dominant colour %s\n",
-		repton.ColourNames[ad.DominantColour])
+	fmt.Printf("%s forwarding to dominant colour %s\n",
+		sprite.LeafName, repton.ColourNames[ad.DominantColour])
 	ad.forwardTo = other
 	for _, sprt := range ad.AllDistinctSprites {
 		if other.HasAllDistinct { break }
@@ -195,8 +196,8 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 		bounds := img.Bounds()
 		numColumns := (bounds.Max.X - bounds.Min.X) / SPRITE_SIZE
 		numRows := (bounds.Max.Y - bounds.Min.Y) / SPRITE_SIZE
-		fmt.Printf("Processing %dx%d sprites in %s\n",
-			numColumns, numRows, fileName)
+		//fmt.Printf("Processing %dx%d sprites in %s\n",
+		//	numColumns, numRows, fileName)
 		for y := 0; y < numRows && !ad.HasAllDistinct; y++ {
 			y0 := y * SPRITE_SIZE
 			y1 := y0 + SPRITE_SIZE
