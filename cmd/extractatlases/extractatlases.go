@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/realh/repmap/pkg/atlas"
 	"github.com/realh/repmap/pkg/repton"
 )
 
@@ -254,18 +255,18 @@ func (ae *AtlasExtractor) Lock() { ae.ColoursDataLock.Lock() }
 func (ae *AtlasExtractor) Unlock() { ae.ColoursDataLock.Unlock() }
 
 func (ae *AtlasExtractor) ProcessFile(fileName string) {
-	dirts := []int{1, 2, 16, 26, 28, 30}
-	img, error := repton.LoadImage(fileName)
-	if error != nil {
-		fmt.Println(error)
+	img, err := repton.LoadImage(fileName)
+	if err != nil {
+		fmt.Println(err)
 		return
 	}
+
+	leafName := filepath.Base(fileName)
 	ae.Wg.Add(1)
 	fmt.Printf("ProcessFile starting on %s\n", fileName)
 	ad := &AtlasData{}
-	leafName := filepath.Base(fileName)
 	ad.Initialise(leafName, ae.DataSetsWithKnownColours, ae)
-	go func() {
+	go func(ad *AtlasData) {
 		bounds := img.Bounds()
 		numColumns := (bounds.Max.X - bounds.Min.X) / SPRITE_SIZE
 		numRows := (bounds.Max.Y - bounds.Min.Y) / SPRITE_SIZE
@@ -279,7 +280,7 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 				x1 := x0 + SPRITE_SIZE
 				sprite := &SpriteDefinition{
 					img, image.Rect(x0, y0, x1, y1), leafName,
-					y == 0 && slices.Contains(dirts, x),
+					false,
 				}
 				//fmt.Printf("Processing %s (%d,%d)\n", sprite, x, y)
 				ad.AddImage(sprite)
@@ -296,7 +297,7 @@ func (ae *AtlasExtractor) ProcessFile(fileName string) {
 		}
 		ae.Wg.Done()
 		fmt.Printf("ProcessFile finished %s\n", ad)
-	}()
+	}(ad)
 }
 
 func (ae *AtlasExtractor) MinimumFilesNeededForCompletion() int {
@@ -372,9 +373,8 @@ func DeadlocksAreEquivalent(m2 map[string]bool) bool {
 
 func (ae *AtlasExtractor) FinishBatch() {
 	ae.Wg.Done()
-	//fmt.Println("**** Finished batch, waiting for image processors ****")
 	ae.Wg.Wait()
-	fmt.Println("**** Finished batch, waiting for image processors ****")
+	fmt.Println("**** Finished batch ****")
 	if len(ae.DataSetsWithKnownColours) < 2 {
 		fmt.Println("Not enough data sets to find common sprites")
 		return
@@ -388,7 +388,9 @@ func (ae *AtlasExtractor) FinishBatch() {
 			if ad.HasAllDistinct {
 				if complete1 == -1 {
 					complete1 = i
-				} else if complete2 == -1 {
+				} else if complete2 == -1 &&
+				ad.DominantColour !=
+				ae.DataSetsWithKnownColours[complete1].DominantColour {
 					complete2 = i
 					break
 				}
@@ -418,7 +420,7 @@ func (ae *AtlasExtractor) FinishBatch() {
 
 func (ae *AtlasExtractor) IsolateCommonSprites(i1, i2 int) {
 	ae.CommonSpritesWg.Add(1)
-	go func() {
+	go func(i1, i2 int) {
 		ad1 := ae.DataSetsWithKnownColours[i1]
 		ad1.StartedFilteringSprites = true
 		var ad2 *AtlasData
@@ -430,7 +432,7 @@ func (ae *AtlasExtractor) IsolateCommonSprites(i1, i2 int) {
 		}
 		ae.SeparateCommonSprites(ad1, ad2)
 		ae.CommonSpritesWg.Done()
-	}()
+	}(i1, i2)
 }
 
 // SeparateCommonSprites finds sprites which are common to ad1 and ad2
@@ -485,6 +487,42 @@ func (ae *AtlasExtractor) SeparateCommonSprites(
 	}
 }
 
+func SpritesToImages(sprites []*SpriteDefinition) []image.Image {
+	images := make([]image.Image, len(sprites))
+	for i, sprite := range sprites {
+		img := sprite.Image
+		region := sprite.Region
+		b := sprite.Image.Bounds()
+		if !repton.RectsAreEqual(&region, &b) {
+			fmt.Printf("Creating new image for common sprite %d\n", i)
+			img = repton.SubImage(img, &region)
+		}
+		images[i] = img
+	}
+	return images
+}
+
+func (ae *AtlasExtractor) SaveCommonSprites(fileName string) {
+	imgs := SpritesToImages(ae.CommonSprites)
+
+	dir := filepath.Dir(fileName)
+	if dir == "" { dir = "." }
+	for i, img := range imgs {
+		fn2 := fmt.Sprintf("%s/%d.png", dir, i)
+		err := repton.SavePNG(img, fn2)
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		}
+	}
+
+	fmt.Printf("Calling ComposeAtlas with %d images\n", len(imgs))
+	atlas := atlas.ComposeAtlas(imgs)
+	err := repton.SavePNG(atlas, fileName)
+	if err != nil {
+		fmt.Printf("%v\n", err)
+	}
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("extractatlases takes 2 arguments: ")
@@ -494,4 +532,5 @@ func main() {
 	ae := AtlasExtractor{}
 	ae.DataSetsWithKnownColours = make(map[int]*AtlasData)
 	ae.Start(os.Args[1])
+	ae.SaveCommonSprites(os.Args[2] + "/common.png")
 }

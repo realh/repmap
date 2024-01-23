@@ -3,9 +3,24 @@ package repton
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 )
+
+func RectsAreSameSize(r1, r2 *image.Rectangle) bool {
+	if r1.Dx() != r2.Dx() { return false }
+	if r1.Dy() != r2.Dy() { return false }
+	return true
+}
+
+func RectsAreEqual(r1, r2 *image.Rectangle) bool {
+	if r1.Min.X != r2.Min.X { return false }
+	if r1.Min.Y != r2.Min.Y { return false }
+	if r1.Max.X != r2.Max.X { return false }
+	if r1.Max.Y != r2.Max.Y { return false }
+	return true
+}
 
 // ImageCompare returns true if the content of both regions is the same.
 // Either or both regions may be nil to compare the entire image. Returns
@@ -78,7 +93,7 @@ func SubImage(img image.Image, region *image.Rectangle) image.Image {
 	width := region.Dx()
 	height := region.Dy()
 	newRegion := image.Rect(0, 0, width, height)
-	newImg := image.NewNRGBA(newRegion)
+	newImg := image.NewRGBA(newRegion)
 	CopyRegion(newImg, &newRegion, img, region)
 	return newImg
 }
@@ -86,7 +101,7 @@ func SubImage(img image.Image, region *image.Rectangle) image.Image {
 // CopyRegion copies a region from src into dest. If either region is null
 // the entire source is used. If destRegion is nil, it is set to the same size
 // as srcRegion but at origin (0, 0).
-func CopyRegion(dest *image.NRGBA, destRegion *image.Rectangle,
+func CopyRegion(dest *image.RGBA, destRegion *image.Rectangle,
 	src image.Image, srcRegion *image.Rectangle,
 ) {
 	if srcRegion == nil {
@@ -121,11 +136,12 @@ func CopyRegion(dest *image.NRGBA, destRegion *image.Rectangle,
 			x1 := destRegion.Min.X + x
 			x2 := srcRegion.Min.X + x
 			r, g, b, a := src.At(x2, y2).RGBA()
-			o := dest.PixOffset(x1, y1)
-			dest.Pix[o] = uint8(r >> 8)
-			dest.Pix[o + 1] = uint8(g >> 8)
-			dest.Pix[o + 2] = uint8(b >> 8)
-			dest.Pix[o + 3] = uint8(a >> 8)
+			dest.SetRGBA(x1, y1, color.RGBA{
+				R: uint8(r >> 8),
+				G: uint8(g >> 8),
+				B: uint8(b >> 8),
+				A: uint8(a >> 8),
+			})
 		}
 	}
 }
