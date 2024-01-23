@@ -40,10 +40,10 @@ func ImagesAreEqualVerbose(img1 image.Image, region1 *image.Rectangle,
 		}
 		fmt.Printf("Comparing regions %v and %v\n", r1desc, r2desc)
 	}
-	width := region1.Max.X - region1.Min.X
-	if width != region2.Max.X - region2.Min.X { return false }
-	height := region1.Max.Y - region1.Min.Y
-	if height != region2.Max.Y - region2.Min.Y { return false }
+	width := region1.Dx()
+	if width != region2.Dx() { return false }
+	height := region1.Dy()
+	if height != region2.Dy() { return false }
 	for y := 0; y < height; y++ {
 		y1 := region1.Min.Y + y
 		y2 := region2.Min.Y + y
@@ -75,27 +75,59 @@ func SubImage(img image.Image, region *image.Rectangle) image.Image {
 		r := img.Bounds()
 		region = &r
 	}
-	width := region.Max.X - region.Min.X
-	height := region.Max.Y - region.Min.Y
+	width := region.Dx()
+	height := region.Dy()
 	newRegion := image.Rect(0, 0, width, height)
 	newImg := image.NewNRGBA(newRegion)
+	CopyRegion(newImg, &newRegion, img, region)
+	return newImg
+}
+
+// CopyRegion copies a region from src into dest. If either region is null
+// the entire source is used. If destRegion is nil, it is set to the same size
+// as srcRegion but at origin (0, 0).
+func CopyRegion(dest *image.NRGBA, destRegion *image.Rectangle,
+	src image.Image, srcRegion *image.Rectangle,
+) {
+	if srcRegion == nil {
+		r := src.Bounds()
+		srcRegion = &r
+	}
+	b := dest.Bounds()
+	if destRegion == nil {
+		r := image.Rect(b.Min.X, b.Min.X + srcRegion.Dx(),
+			b.Min.Y, b.Min.Y + srcRegion.Dy())
+		destRegion = &r
+	}
+	if destRegion.Max.X > b.Max.X {
+		destRegion.Max.X = b.Max.X
+	}
+	if destRegion.Max.Y > b.Max.Y {
+		destRegion.Max.Y = b.Max.Y
+	}
+	if destRegion.Min.X < b.Min.X {
+		destRegion.Min.X = b.Min.X
+	}
+	if destRegion.Min.Y < b.Min.Y {
+		destRegion.Min.Y = b.Min.Y
+	}
+	
+	width := destRegion.Dx()
+	height := destRegion.Dy()
 	for y := 0; y < height; y++ {
-		y1 := region.Min.Y + y
+		y1 := destRegion.Min.Y + y
+		y2 := srcRegion.Min.Y + y
 		for x := 0; x < width; x++ {
-			x1 := region.Min.X + x
-			r, g, b, a := img.At(x1, y1).RGBA()
-			o := newImg.PixOffset(x, y)
-			if o < 0 {
-				fmt.Printf("Offset of (%d, %d) in region %v is %d\n",
-					x, y, newImg.Bounds(), o)
-			}
-			newImg.Pix[o] = uint8(r >> 8)
-			newImg.Pix[o + 1] = uint8(g >> 8)
-			newImg.Pix[o + 2] = uint8(b >> 8)
-			newImg.Pix[o + 3] = uint8(a >> 8)
+			x1 := destRegion.Min.X + x
+			x2 := srcRegion.Min.X + x
+			r, g, b, a := src.At(x2, y2).RGBA()
+			o := dest.PixOffset(x1, y1)
+			dest.Pix[o] = uint8(r >> 8)
+			dest.Pix[o + 1] = uint8(g >> 8)
+			dest.Pix[o + 2] = uint8(b >> 8)
+			dest.Pix[o + 3] = uint8(a >> 8)
 		}
 	}
-	return newImg
 }
 
 func SavePNG(img image.Image, fileName string) error {
